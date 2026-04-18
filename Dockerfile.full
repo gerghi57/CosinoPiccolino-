@@ -1,17 +1,16 @@
-# Monolithic Dockerfile for EasyProxy
-# Includes FlareSolverr and Byparr in a single image
+# Monolithic Dockerfile for EasyProxy (Full Version)
+# Optimized: Now uses FlareSolverr v3 (Python) - No Node.js required!
 
 FROM python:3.11-bookworm
 
-# 1. Basic Environment & Tools
+# 1. Environment Settings
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV FLARESOLVERR_URL=http://localhost:8191
 ENV BYPARR_URL=http://localhost:8192
 ENV BYPARR_PORT=8192
-ENV NODE_ENV=production
 
-# 2. Install System Dependencies (FFmpeg, Node.js, Chromium, Xvfb)
+# 2. System Dependencies (FFmpeg, Chromium, Xvfb)
 RUN apt-get update && apt-get install -y \
     curl \
     git \
@@ -36,23 +35,19 @@ RUN apt-get update && apt-get install -y \
     libglu1-mesa \
     ca-certificates \
     fonts-liberation \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Install FlareSolverr
+# 3. FlareSolverr v3 (Python)
 RUN git clone https://github.com/FlareSolverr/FlareSolverr.git /app/flaresolverr \
     && cd /app/flaresolverr \
-    && npm install \
-    && npm run build \
-    && rm -rf src/ .git/
+    && pip install --no-cache-dir -r requirements.txt
 
-# 4. Install Byparr (Download latest binary)
+# 4. Byparr (Go Binary)
 RUN mkdir -p /app/byparr \
     && curl -L https://github.com/ThePhaseless/Byparr/releases/latest/download/byparr-linux-amd64 -o /app/byparr/byparr \
     && chmod +x /app/byparr/byparr
 
-# 5. Install EasyProxy Dependencies
+# 5. EasyProxy Dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN python -m playwright install chromium
@@ -63,7 +58,7 @@ RUN chmod +x entrypoint.sh
 
 # 7. Metadata & Ports
 LABEL org.opencontainers.image.title="EasyProxy Monolith"
-LABEL org.opencontainers.image.description="All-in-one HLS Proxy with integrated FlareSolverr and Byparr"
+LABEL org.opencontainers.image.description="All-in-one HLS Proxy with integrated FlareSolverr v3 and Byparr"
 EXPOSE 7860 8191 8192
 
 # 8. Execution

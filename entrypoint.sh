@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Start FlareSolverr in the background
-echo "🚀 Starting FlareSolverr..."
-cd /app/flaresolverr && node dist/index.js &
+echo "🚀 Starting FlareSolverr (v3 Python)..."
+cd /app/flaresolverr && python3 src/flaresolverr.py &
 
 # Start Byparr in the background
 echo "🛡️ Starting Byparr..."
