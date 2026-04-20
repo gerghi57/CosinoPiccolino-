@@ -1,10 +1,4 @@
-name: Sync della repo sullo Space HF
-
-env:
-  HF_USERNAME: gerghi57
-  HF_SPACE: cosinopiccolino
-  HF_USERNAME_TOPETTA: signorie
-  HF_SPACE_TOPETTA: topetta
+name: Sync della repo su più Space HF
 
 on:
   schedule:
@@ -16,12 +10,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Request Factory Rebuild
+      - name: Restart Space gerghi57
         run: |
           curl -X POST \
             -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" \
-            "https://huggingface.co/api/spaces/${HF_USERNAME}/${HF_SPACE}/restart?factory=true"
-        
+            -v \
+            "https://huggingface.co/api/spaces/gerghi57/cosinopiccolino/restart?factory=true"
+
+      - name: Restart Space signorie
+        run: |
           curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" \
-            "https://huggingface.co/api/spaces/${HF_USERNAME_TOPETTA}/${HF_SPACE_TOPETTA}/restart?factory=true"
+            -H "Authorization: Bearer ${{ secrets.HF_TOKEN_TOPETTA }}" \
+            -v \
+            "https://huggingface.co/api/spaces/signorie/topetta/restart?factory=true"
