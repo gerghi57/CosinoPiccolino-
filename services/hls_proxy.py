@@ -2419,9 +2419,13 @@ class HLSProxy:
                     if "user-agent" in curl_headers:
                         del curl_headers["user-agent"]
                     
-                    # ✅ FIX: Ensure Referer is set for cccdn.net
-                    if "cccdn.net" in stream_url and "Referer" not in curl_headers:
+                    # ✅ FIX: Ensure Referer is set to ROOT for cccdn.net
+                    # Some CDNs prefer the base domain over the full page URL
+                    if "cccdn.net" in stream_url:
                         curl_headers["Referer"] = "https://cinemacity.cc/"
+                    elif "Referer" not in curl_headers and "referer" not in curl_headers:
+                        # Fallback for others if missing
+                        pass 
                     
                     # Ensure Accept is broad
                     if "Accept" not in curl_headers:
@@ -2431,8 +2435,16 @@ class HLSProxy:
                     if session_proxy:
                         curl_proxies = {"http": session_proxy, "https": session_proxy}
                     
+                    # ✅ CRITICAL FIX: Ensure commas are NOT encoded. 
+                    # cccdn.net multi-path URLs MUST have literal commas.
+                    final_curl_url = stream_url
+                    if "cccdn.net" in final_curl_url:
+                        import urllib.parse
+                        # Unquote first to avoid double encoding if it was already encoded
+                        final_curl_url = urllib.parse.unquote(final_curl_url)
+
                     curl_resp = await curl_s.get(
-                        stream_url, 
+                        final_curl_url, 
                         headers=curl_headers, 
                         proxies=curl_proxies,
                         verify=not disable_ssl,

@@ -231,10 +231,7 @@ class CinemaCityExtractor:
         # Standard cookies don't strictly require a trailing semicolon
         clean_cookies = clean_cookies.strip().rstrip(';')
 
-        # Force bypass WARP in the proxy for this specific stream
-        separator = "&" if "?" in safe_url else "?"
-        safe_url += f"{separator}warp=off"
-
+        # mediaflow_endpoint will determine how to handle the stream
         return {
             "destination_url": safe_url,
             "request_headers": {
