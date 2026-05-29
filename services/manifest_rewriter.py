@@ -16,6 +16,15 @@ except ImportError:
 
 class ManifestRewriter:
     @staticmethod
+    def _inherit_query_if_missing(absolute_url: str, base_query: str) -> str:
+        if not base_query:
+            return absolute_url
+        parsed_url = urllib.parse.urlparse(absolute_url)
+        if parsed_url.query:
+            return absolute_url
+        return urllib.parse.urlunparse(parsed_url._replace(query=base_query))
+
+    @staticmethod
     def rewrite_mpd_native(
         manifest_content: str,
         mpd_url: str,
@@ -274,10 +283,9 @@ class ManifestRewriter:
         # no_bypass e mantenuto per compatibilita, ma il rewriter ora proxa sempre.
         _ = no_bypass
 
-        # VixSrc used to have a custom master-playlist rewrite here.
-        # ExoPlayer is stricter than VLC about HLS master/media relationships,
-        # so we now let VixSrc fall through to the generic HLS rewriting path.
-        _ = is_vixsrc_stream
+        # ExoPlayer is stricter than VLC about HLS master/media relationships.
+        # For VixSrc, preserve the full master instead of collapsing to one
+        # variant, otherwise audio/video TrackGroups can become inconsistent.
 
         # Generic master-playlist optimization: keep only the highest-bandwidth
         # video variant, while preserving audio/media tags and other metadata.
@@ -295,12 +303,13 @@ class ManifestRewriter:
                     }
                 )
 
-        if generic_streams:
+        if generic_streams and not is_vixsrc_stream:
             highest_quality_stream = max(generic_streams, key=lambda x: x["bandwidth"])
             logger.debug(
                 "Generic HLS: selected max bandwidth %s.",
                 highest_quality_stream["bandwidth"],
             )
+            base_query = urllib.parse.urlparse(base_url).query
 
             header_params = "".join(
                 [
@@ -322,7 +331,10 @@ class ManifestRewriter:
                 # Usiamo un formato pulito per evitare double-encoding
                 header_params += f"&proxy={urllib.parse.quote(selected_proxy, safe='')}"
 
-            absolute_variant_url = urljoin(base_url, highest_quality_stream["url"])
+            absolute_variant_url = ManifestRewriter._inherit_query_if_missing(
+                urljoin(base_url, highest_quality_stream["url"]),
+                base_query,
+            )
             if shorten_url_func:
                 url_id = await shorten_url_func(absolute_variant_url)
                 proxy_variant_url = f"{proxy_base}/proxy/hls/manifest.m3u8?hls_url_id={url_id}{header_params}"
@@ -337,7 +349,10 @@ class ManifestRewriter:
 
             proxied_media_lines = []
             for line in lines:
-                if not line.startswith("#EXT-X-MEDIA:") or 'URI="' not in line:
+                if not line.startswith("#EXT-X-MEDIA:"):
+                    continue
+                if 'URI="' not in line:
+                    proxied_media_lines.append(line.strip())
                     continue
 
                 uri_start = line.find('URI="') + 5
@@ -346,7 +361,10 @@ class ManifestRewriter:
                     proxied_media_lines.append(line.strip())
                     continue
 
-                media_url = urljoin(base_url, line[uri_start:uri_end])
+                media_url = ManifestRewriter._inherit_query_if_missing(
+                    urljoin(base_url, line[uri_start:uri_end]),
+                    base_query,
+                )
                 if shorten_url_func:
                     url_id = await shorten_url_func(media_url)
                     proxy_media_url = f"{proxy_base}/proxy/hls/manifest.m3u8?hls_url_id={url_id}{header_params}"
@@ -418,7 +436,10 @@ class ManifestRewriter:
 
                 if uri_start > 4 and uri_end > uri_start:
                     original_key_url = line[uri_start:uri_end]
-                    absolute_key_url = urljoin(base_url, original_key_url)
+                    absolute_key_url = ManifestRewriter._inherit_query_if_missing(
+                        urljoin(base_url, original_key_url),
+                        base_query,
+                    )
 
                     encoded_key_url = urllib.parse.quote(absolute_key_url, safe="")
                     encoded_original_channel_url = urllib.parse.quote(
@@ -461,7 +482,10 @@ class ManifestRewriter:
 
                 if uri_start > 4 and uri_end > uri_start:
                     original_media_url = line[uri_start:uri_end]
-                    absolute_media_url = urljoin(base_url, original_media_url)
+                    absolute_media_url = ManifestRewriter._inherit_query_if_missing(
+                        urljoin(base_url, original_media_url),
+                        base_query,
+                    )
                     encoded_media_url = urllib.parse.quote(absolute_media_url, safe="")
 
                     # Usa endpoint manifest
@@ -484,7 +508,10 @@ class ManifestRewriter:
 
                 if uri_start > 4 and uri_end > uri_start:
                     original_iframe_url = line[uri_start:uri_end]
-                    absolute_iframe_url = urljoin(base_url, original_iframe_url)
+                    absolute_iframe_url = ManifestRewriter._inherit_query_if_missing(
+                        urljoin(base_url, original_iframe_url),
+                        base_query,
+                    )
                     encoded_iframe_url = urllib.parse.quote(absolute_iframe_url, safe="")
 
                     # Gli I-FRAME sono solitamente m3u8 o segmenti a sé stanti
@@ -507,7 +534,10 @@ class ManifestRewriter:
 
                 if uri_start > 4 and uri_end > uri_start:
                     original_key_url = line[uri_start:uri_end]
-                    absolute_key_url = urljoin(base_url, original_key_url)
+                    absolute_key_url = ManifestRewriter._inherit_query_if_missing(
+                        urljoin(base_url, original_key_url),
+                        base_query,
+                    )
                     encoded_key_url = urllib.parse.quote(absolute_key_url, safe="")
                     
                     # Proxy KEY URL (come per #EXT-X-KEY)
@@ -535,7 +565,10 @@ class ManifestRewriter:
 
                 if uri_start > 4 and uri_end > uri_start:
                     original_map_url = line[uri_start:uri_end]
-                    absolute_map_url = urljoin(base_url, original_map_url)
+                    absolute_map_url = ManifestRewriter._inherit_query_if_missing(
+                        urljoin(base_url, original_map_url),
+                        base_query,
+                    )
                     encoded_map_url = urllib.parse.quote(absolute_map_url, safe="")
 
                     # Usa endpoint segment.mp4
@@ -553,8 +586,10 @@ class ManifestRewriter:
                 absolute_url = urljoin(base_url, line) if not line.startswith("http") else line
 
                 # Eredita query params (es. token)
-                if base_query and "?" not in absolute_url:
-                    absolute_url += f"?{base_query}"
+                absolute_url = ManifestRewriter._inherit_query_if_missing(
+                    absolute_url,
+                    base_query,
+                )
 
                 encoded_url = urllib.parse.quote(absolute_url, safe="")
 
